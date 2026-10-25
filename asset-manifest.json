@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/static/css/main.a8c5d8f2.css",
-    "main.js": "/static/js/main.d721847e.js",
+    "main.js": "/static/js/main.133ce73e.js",
     "static/media/Aeonik-Bold.ttf": "/static/media/Aeonik-Bold.81657f19d2fb319958c8.ttf",
     "static/media/Aeonik-Regular.ttf": "/static/media/Aeonik-Regular.53b95a6b9aa7da4feab5.ttf",
     "static/media/Aeonik-Bold.woff2": "/static/media/Aeonik-Bold.80650260c7c5645120c5.woff2",
@@ -10,6 +10,6 @@
   },
   "entrypoints": [
     "static/css/main.a8c5d8f2.css",
-    "static/js/main.d721847e.js"
+    "static/js/main.133ce73e.js"
   ]
 }
