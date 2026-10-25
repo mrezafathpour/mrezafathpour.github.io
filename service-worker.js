@@ -1,13 +1,16 @@
 // Shows offline.html when a page cannot be loaded without a connection.
 // Pages are always fetched from the network first, so the app itself is never
-// served stale from here; only the offline page (and its icon) is cached.
+// served stale from here; only the offline page and the two files it needs
+// (its icon, and mr-logo.js with its "MR" logo) are cached.
 // Paths are relative to this file, so it works under any path the site is
 // served from.
 
-// Bump the version whenever offline.html changes, so the new one is cached
-const CACHE = "offline-v5";
+// Bump the version whenever offline.html, its icon or mr-logo.js changes, so
+// the new ones are cached
+const CACHE = "offline-v6";
 const OFFLINE_URL = "offline.html";
-const PRECACHE = [OFFLINE_URL, "icons/favicon.svg"];
+const OFFLINE_FILES = ["icons/favicon.svg", "mr-logo.js"];
+const PRECACHE = [OFFLINE_URL, ...OFFLINE_FILES];
 
 self.addEventListener("install", (event) => {
     event.waitUntil(
@@ -70,12 +73,18 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // The offline page's icon, which it cannot fetch while offline
-    if (new URL(request.url).pathname.endsWith("/icons/favicon.svg")) {
+    // The offline page's files, which it cannot fetch while offline. From
+    // the network when there is one (the page loader in index.html uses
+    // mr-logo.js too, and must get the current one), else from the cache.
+    // Matched by the end of their path, as the offline page is shown at any
+    // address and asks for them relative to it.
+    const { pathname } = new URL(request.url);
+    const file = OFFLINE_FILES.find((name) => pathname.endsWith("/" + name));
+    if (file) {
         event.respondWith(
-            caches
-                .match(request)
-                .then((cached) => cached || fetch(request))
+            fetch(request).catch(() =>
+                caches.open(CACHE).then((cache) => cache.match(file))
+            )
         );
     }
 });
