@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+            name="theme-color"
+            content="#eeeef4"
+            media="(prefers-color-scheme: light)"
+        />
+        <meta
+            name="theme-color"
+            content="#1a1a1a"
+            media="(prefers-color-scheme: dark)"
+        />
+        <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
+        <title>You're offline · &lt;/ MR &gt;</title>
+        <!--
+            Shown by the service worker (service-worker.js) when the app is opened without
+            a connection. An app that is already open stays as it is when the
+            connection drops. It is cached on its own, so everything it needs
+            (styles, logo, script) lives in this one file.
+        -->
+        <style>
+            :root {
+                color-scheme: light dark;
+                /* Same accent as the app's theme in src/index.css */
+                --accent: #ff6b35;
+                --accent-light: #ff9f6e;
+                --accent-text: var(--accent);
+                --bg: #eeeef4;
+                --text: #1a1a1a;
+                --muted: rgba(26, 26, 26, 0.6);
+                --surface: rgba(255, 255, 255, 0.55);
+                --border: rgba(15, 23, 42, 0.1);
+                --logo-ink: #14110f;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --accent-text: var(--accent-light);
+                    --bg: #1a1a1a;
+                    --text: #eeeef4;
+                    --muted: rgba(238, 238, 244, 0.6);
+                    --surface: rgba(255, 255, 255, 0.06);
+                    --border: rgba(255, 255, 255, 0.14);
+                }
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            /* At least the screen's height, so the content is centred, but
+               free to grow and scroll when it does not fit (a phone turned
+               sideways) */
+            body {
+                margin: 0;
+                min-height: 100vh;
+                min-height: 100dvh;
+                display: grid;
+                place-items: center;
+                padding: 2rem 1rem;
+                overflow-x: hidden;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, "Helvetica Neue", sans-serif;
+                -webkit-font-smoothing: antialiased;
+                color: var(--text);
+                background: var(--bg);
+            }
+
+            /* ---------- Drifting glow in the background ---------- */
+
+            .glow {
+                position: fixed;
+                inset: 0;
+                z-index: -1;
+                pointer-events: none;
+            }
+
+            .glow span {
+                position: absolute;
+                width: 46vmax;
+                height: 46vmax;
+                border-radius: 50%;
+                filter: blur(9vmax);
+                opacity: 0.35;
+                animation: drift 18s ease-in-out infinite alternate;
+            }
+
+            .glow span:nth-child(1) {
+                top: -18vmax;
+                left: -12vmax;
+                background: var(--accent);
+            }
+
+            .glow span:nth-child(2) {
+                right: -16vmax;
+                bottom: -20vmax;
+                background: var(--accent-light);
+                animation-duration: 22s;
+                animation-delay: -6s;
+            }
+
+            .glow span:nth-child(3) {
+                top: 40%;
+                left: 55%;
+                width: 26vmax;
+                height: 26vmax;
+                background: var(--accent);
+                opacity: 0.18;
+                animation-duration: 26s;
+                animation-delay: -12s;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                .glow span {
+                    opacity: 0.2;
+                }
+            }
+
+            @keyframes drift {
+                to {
+                    transform: translate(12vmax, 10vmax) scale(1.15);
+                }
+            }
+
+            /* ---------- Card ---------- */
+
+            main {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 1.25rem;
+                width: min(100%, 26rem);
+                text-align: center;
+            }
+
+            /* ---------- Logo: pixels fall into place, then the "signal"
+               keeps breaking them apart and pulling them back ---------- */
+
+            .logo-wrap {
+                --logo-size: 8rem;
+                display: grid;
+                place-items: center;
+                width: calc(var(--logo-size) * 1.375);
+                height: calc(var(--logo-size) * 1.375);
+                margin-bottom: 0.5rem;
+            }
+
+            /* The logo and its ripples share one grid cell, centred */
+            .logo-wrap > * {
+                grid-area: 1 / 1;
+            }
+
+            /* Ripples searching for a connection: the tile's own outline,
+               corners included (icons/favicon.svg rounds them by 3 of its 16
+               units), growing outwards */
+            .ripple {
+                width: var(--logo-size);
+                height: var(--logo-size);
+                border: 2px solid var(--accent);
+                border-radius: calc(3 / 16 * 100%);
+                opacity: 0;
+                animation: ripple 3s ease-out infinite;
+                animation-delay: 1.6s;
+            }
+
+            .ripple:nth-of-type(2) {
+                animation-delay: 2.6s;
+            }
+
+            .ripple:nth-of-type(3) {
+                animation-delay: 3.6s;
+            }
+
+            @keyframes ripple {
+                0% {
+                    opacity: 0.55;
+                    transform: scale(0.85);
+                }
+                100% {
+                    opacity: 0;
+                    transform: scale(1.6);
+                }
+            }
+
+            .logo {
+                position: relative;
+                width: var(--logo-size);
+                height: var(--logo-size);
+                overflow: visible;
+                animation: tile-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+            }
+
+            .logo .tile {
+                fill: var(--accent);
+                filter: drop-shadow(0 0.6px 1.2px rgba(255, 107, 53, 0.45));
+            }
+
+            @keyframes tile-in {
+                from {
+                    opacity: 0;
+                    transform: scale(0.6) rotate(-8deg);
+                }
+            }
+
+            .cell {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: scatter 6s ease-in-out infinite;
+                animation-delay: calc(2.2s + var(--i) * 6ms);
+            }
+
+            .cell rect {
+                fill: var(--logo-ink);
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: drop 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+                animation-delay: calc(0.45s + var(--i) * 28ms);
+            }
+
+            @keyframes drop {
+                from {
+                    opacity: 0;
+                    transform: translateY(-7px) scale(0.4);
+                }
+            }
+
+            /* Holds still most of the loop, then glitches apart and back */
+            @keyframes scatter {
+                0%,
+                62%,
+                100% {
+                    transform: none;
+                    opacity: 1;
+                }
+                70% {
+                    transform: translate(var(--dx), var(--dy)) rotate(var(--r));
+                    opacity: 0.35;
+                }
+                76% {
+                    transform: translate(
+                            calc(var(--dx) * -0.25),
+                            calc(var(--dy) * -0.25)
+                        )
+                        rotate(calc(var(--r) * -0.3));
+                    opacity: 0.9;
+                }
+                84% {
+                    transform: none;
+                    opacity: 1;
+                }
+            }
+
+            /* ---------- Text ---------- */
+
+            .reveal {
+                animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+            }
+
+            @keyframes rise {
+                from {
+                    opacity: 0;
+                    transform: translateY(0.75rem);
+                }
+            }
+
+            .status {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.375rem 0.875rem;
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                font-size: 0.8125rem;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                background: var(--surface);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                animation-delay: 0.9s;
+            }
+
+            .status-dot {
+                position: relative;
+                width: 0.5rem;
+                height: 0.5rem;
+                border-radius: 50%;
+                background: var(--accent);
+                transition: background 0.3s ease;
+            }
+
+            .status-dot::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: 50%;
+                background: inherit;
+                animation: ping 1.6s ease-out infinite;
+            }
+
+            @keyframes ping {
+                to {
+                    opacity: 0;
+                    transform: scale(2.8);
+                }
+            }
+
+            .is-online .status-dot {
+                background: #22c55e;
+            }
+
+            h1 {
+                margin: 0;
+                font-size: clamp(1.75rem, 7vw, 2.25rem);
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                animation-delay: 1s;
+            }
+
+            .code {
+                margin: -0.25rem 0 0;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas,
+                    monospace;
+                font-size: 0.9375rem;
+                font-weight: 600;
+                color: var(--accent-text);
+                animation-delay: 1.1s;
+            }
+
+            .caret {
+                display: inline-block;
+                width: 0.55em;
+                height: 1.1em;
+                margin-left: 0.15em;
+                vertical-align: -0.2em;
+                background: currentColor;
+                animation: blink 1s steps(1) infinite;
+            }
+
+            @keyframes blink {
+                50% {
+                    opacity: 0;
+                }
+            }
+
+            .message {
+                margin: 0;
+                max-width: 22rem;
+                font-size: 1rem;
+                line-height: 1.5;
+                color: var(--muted);
+                animation-delay: 1.2s;
+            }
+
+            button {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                margin-top: 0.5rem;
+                padding: 0.75rem 1.5rem;
+                border: 0;
+                border-radius: 999px;
+                font: inherit;
+                font-weight: 600;
+                color: #fff;
+                background: var(--accent);
+                box-shadow: 0 10px 28px -10px var(--accent);
+                cursor: pointer;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                animation-delay: 1.3s;
+            }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 14px 32px -10px var(--accent);
+            }
+
+            button:active {
+                transform: scale(0.97);
+            }
+
+            button:focus-visible {
+                outline: 3px solid var(--accent-light);
+                outline-offset: 3px;
+            }
+
+            button svg {
+                width: 1.1em;
+                height: 1.1em;
+            }
+
+            .is-checking button {
+                cursor: progress;
+            }
+
+            .is-checking button svg {
+                animation: spin 0.8s linear infinite;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            /* Tried again, still no connection */
+            .is-failed .status {
+                animation: shake 0.45s ease;
+            }
+
+            @keyframes shake {
+                20%,
+                60% {
+                    transform: translateX(-6px);
+                }
+                40%,
+                80% {
+                    transform: translateX(6px);
+                }
+            }
+
+            /* Short screens (a phone turned sideways): everything tighter,
+               so most of it fits without scrolling */
+            @media (max-height: 560px) {
+                body {
+                    padding: 1.25rem 1rem;
+                }
+
+                main {
+                    gap: 0.75rem;
+                }
+
+                .logo-wrap {
+                    --logo-size: 4.5rem;
+                    margin-bottom: 0;
+                }
+
+                h1 {
+                    font-size: 1.5rem;
+                }
+
+                .message {
+                    font-size: 0.9375rem;
+                }
+
+                button {
+                    margin-top: 0;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="glow" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+
+        <main>
+            <div class="logo-wrap" aria-hidden="true">
+                <span class="ripple"></span>
+                <span class="ripple"></span>
+                <span class="ripple"></span>
+                <svg
+                    class="logo"
+                    viewBox="0 0 16 16"
+                    shape-rendering="crispEdges"
+                >
+                    <rect class="tile" width="16" height="16" rx="3" />
+                    <g id="pixels"></g>
+                </svg>
+            </div>
+
+            <span class="status reveal" role="status" aria-live="polite">
+                <span class="status-dot"></span>
+                <span id="status-text">No connection</span>
+            </span>
+
+            <h1 class="reveal">You're offline</h1>
+            <p class="code reveal">
+                &lt;/ connection lost &gt;<span class="caret"></span>
+            </p>
+            <p class="message reveal">
+                Check your internet connection. This page will reconnect on its
+                own as soon as you're back online.
+            </p>
+
+            <button type="button" id="retry" class="reveal">
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                    <path d="M21 3v6h-6" />
+                </svg>
+                Try again
+            </button>
+        </main>
+
+        <script>
+            // The "MR" letters of icons/favicon.svg as [x, y, width, height] blocks
+            // on its 16 x 16 grid, split below into single pixels
+            var BLOCKS = [
+                [2, 4, 1, 8],
+                [6, 4, 1, 8],
+                [3, 5, 1, 1],
+                [5, 5, 1, 1],
+                [4, 6, 1, 2],
+                [9, 4, 1, 8],
+                [10, 4, 3, 1],
+                [13, 5, 1, 3],
+                [10, 8, 3, 1],
+                [11, 9, 1, 1],
+                [12, 10, 1, 1],
+                [13, 11, 1, 1],
+            ];
+
+            var SVG_NS = "http://www.w3.org/2000/svg";
+            var group = document.getElementById("pixels");
+
+            var cells = [];
+            BLOCKS.forEach(function (b) {
+                for (var x = b[0]; x < b[0] + b[2]; x++) {
+                    for (var y = b[1]; y < b[1] + b[3]; y++) {
+                        cells.push([x, y]);
+                    }
+                }
+            });
+
+            // Fall in column by column, left to right
+            cells.sort(function (a, b) {
+                return a[0] - b[0] || a[1] - b[1];
+            });
+
+            var random = function (min, max) {
+                return min + Math.random() * (max - min);
+            };
+
+            cells.forEach(function (cell, i) {
+                var g = document.createElementNS(SVG_NS, "g");
+                g.setAttribute("class", "cell");
+                g.style.setProperty("--i", i);
+                // How far (in grid pixels) this one flies off when the
+                // signal breaks up
+                g.style.setProperty("--dx", random(-3, 3).toFixed(2) + "px");
+                g.style.setProperty("--dy", random(-3, 3).toFixed(2) + "px");
+                g.style.setProperty("--r", random(-90, 90).toFixed(0) + "deg");
+
+                var rect = document.createElementNS(SVG_NS, "rect");
+                rect.setAttribute("x", cell[0]);
+                rect.setAttribute("y", cell[1]);
+                rect.setAttribute("width", 1);
+                rect.setAttribute("height", 1);
+
+                g.appendChild(rect);
+                group.appendChild(g);
+            });
+
+            // ---------- Reconnecting ----------
+
+            var statusText = document.getElementById("status-text");
+            var retry = document.getElementById("retry");
+            var reloading = false;
+
+            var reconnect = function () {
+                if (reloading) return;
+                reloading = true;
+
+                document.body.classList.add("is-online");
+                statusText.textContent = "Back online, reloading…";
+                setTimeout(function () {
+                    // Opened directly, this page would just reload itself
+                    if (/offline\.html$/.test(location.pathname)) {
+                        location.replace("./");
+                    } else {
+                        location.reload();
+                    }
+                }, 900);
+            };
+
+            // A real request, since navigator.onLine can claim a connection
+            // that does not actually reach the site
+            var checking = false;
+
+            // Offline, the request fails at once; the spinner still turns
+            // this long, so the tap visibly did something
+            var MIN_CHECK_MS = 900;
+
+            var check = function () {
+                if (checking || reloading) return;
+                checking = true;
+
+                var body = document.body;
+                body.classList.remove("is-failed");
+                body.classList.add("is-checking");
+                statusText.textContent = "Checking…";
+
+                var startedAt = Date.now();
+
+                var settle = function (isOnline) {
+                    var wait = Math.max(
+                        0,
+                        MIN_CHECK_MS - (Date.now() - startedAt)
+                    );
+
+                    setTimeout(function () {
+                        checking = false;
+                        body.classList.remove("is-checking");
+
+                        if (isOnline) {
+                            reconnect();
+                            return;
+                        }
+
+                        statusText.textContent = "Still offline";
+                        // Restarts the shake even on taps in quick succession
+                        void body.offsetWidth;
+                        body.classList.add("is-failed");
+                    }, wait);
+                };
+
+                fetch(location.href, { cache: "no-store" })
+                    .then(function (response) {
+                        settle(response.ok);
+                    })
+                    .catch(function () {
+                        settle(false);
+                    });
+            };
+
+            retry.addEventListener("click", check);
+            window.addEventListener("online", check);
+
+            // The connection may have come back while the app was in the
+            // background, with no "online" event once it is shown again
+            document.addEventListener("visibilitychange", function () {
+                if (document.visibilityState === "visible" && navigator.onLine) {
+                    check();
+                }
+            });
+        </script>
+    </body>
+</html>
